@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions'
 import * as admin from 'firebase-admin'
 import * as sendgrid from '@sendgrid/mail'
 import { document } from 'firebase-functions/lib/providers/firestore';
+import { event } from 'firebase-functions/lib/providers/analytics';
 
 // firebase admin init admin
 admin.initializeApp()
@@ -13,7 +14,7 @@ const APP_NAME = 'Coffee Shop App';
 const API_KEY = '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'
 
 // Creates new non-admin user
-export const createUser = functions.https.onRequest((request, response) => {
+export const createUser = functions.https.onRequest(async (request, response) => {
     // request params to email account object
     const user = {
         email: request.body.email,
@@ -25,36 +26,42 @@ export const createUser = functions.https.onRequest((request, response) => {
 
     // request params for firestore document object
     const staffMember = request.body
+    let newUser
 
-    // create new user with automated password
-    admin.auth().createUser(user)
-    .then((newUser) => {
-        console.log("New user created")
-        // send welcome email
-        sendWelcomeEmail(newUser.email, newUser.displayName, user.password, request.body.role)
-        .then(() => {
-            console.log("Welcome email sent")
-            // create new user document
-            createUserDocument(staffMember)
-            .then((docRef => {
-                console.log('new document added: ' + docRef.id)
-                response.send("new user created, welcome email sent & new user document created: " + docRef.id)
-            }))
-            .catch((error) => {
-                console.log(`Document failed to write: ${error}`)
-                response.send("New user created and welcome email sent but Document write failed" )
-            })
-        })
-        .catch((err) => {
-            console.log("Welcome email sending failed: " + err)
-            response.send("New user created but welcome email failed to send to: " + user.email)
-        })
+    try {
+        // create new user with automated password
+        newUser = await admin.auth().createUser(user).then((_newUser) => { return _newUser.toJSON() })
+        console.log("New authenticated user created.")
         
+    } catch (error) {
+        
+        console.log(error)
+        response.status(500).send("Errors have occurred:\n" + error)
+    }
+
+
+        // delete password from staffMember
+        delete staffMember['password']
+
+        // add uid to staff member
+        staffMember.uid = newUser.uid;
+
+
+    // create new user document
+    const promise1 = createUserDocument(staffMember)
+
+    // send welcome email
+    const promise2 = sendWelcomeEmail(user.email, user.displayName, user.password, staffMember.role)
+
+    // resolve all promises
+    Promise.all([promise1, promise2])
+    .then((results) => {
+        console.log(results)
+        response.send("User document created + welcome email sent")
     })
-    .catch((err) => {
-        console.log(err)
-        response.send("New user creation failed: " + err)
-        
+    .catch((error) => {
+        console.log("Errors have occurred:\n" + error)
+        response.status(500).send(error)
     })
 })
 
@@ -82,5 +89,11 @@ function sendWelcomeEmail (email, displayName, password, role) {
 
   // create a user document
   function createUserDocument(staffMember) {
-      return admin.firestore().collection('Staff').add(staffMember)
+      return admin.firestore().collection('staff').add(staffMember)
   }
+
+// deletes authenticated user when user is deleted in database
+export const deleteAuthenicatedUser = functions.firestore
+.document(`staff/{staffId}`).onDelete((snap, context) => {
+    return admin.auth().deleteUser(snap.data().uid)
+})
