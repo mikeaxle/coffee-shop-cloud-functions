@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions'
 import * as admin from 'firebase-admin'
 import * as sendgrid from '@sendgrid/mail'
+import { document } from 'firebase-functions/lib/providers/firestore';
 
 // firebase admin init admin
 admin.initializeApp()
@@ -13,7 +14,7 @@ const API_KEY = 'SG.JLLI2j1aS1SYR69ZqYIr_A.vMR0omRYNyVhsZQey3Ax40xmBPMoNODv_dxWs
 
 // Creates new non-admin user
 export const createUser = functions.https.onRequest((request, response) => {
-    // request params
+    // request params to email account object
     const user = {
         email: request.body.email,
         password: request.body.password,
@@ -21,6 +22,9 @@ export const createUser = functions.https.onRequest((request, response) => {
         displayName: request.body.firstName,
         photoURL: request.body.image
     }
+
+    // request params for firestore document object
+    const staffMember = request.body
 
     // create new user with automated password
     admin.auth().createUser(user)
@@ -30,7 +34,16 @@ export const createUser = functions.https.onRequest((request, response) => {
         sendWelcomeEmail(newUser.email, newUser.displayName, user.password, request.body.role)
         .then(() => {
             console.log("Welcome email sent")
-            response.send("New user created & welcome email sent to: " + user.email)
+            // create new user document
+            createUserDocument(staffMember)
+            .then((docRef => {
+                console.log('new document added: ' + docRef.id)
+                response.send("new user created, welcome email sent & new user document created: " + docRef.id)
+            }))
+            .catch((error) => {
+                console.log(`Document failed to write: ${error}`)
+                response.send("New user created and welcome email sent but Document write failed" )
+            })
         })
         .catch((err) => {
             console.log("Welcome email sending failed: " + err)
@@ -65,4 +78,9 @@ function sendWelcomeEmail (email, displayName, password, role) {
 
     // send message
     return sendgrid.send(msg)
+  }
+
+  // create a user document
+  function createUserDocument(staffMember) {
+      return admin.firestore().collection('Staff').add(staffMember)
   }
