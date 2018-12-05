@@ -24,6 +24,8 @@ export const createUser = functions.https.onRequest(async (request, response) =>
         photoURL: request.body.image
     }
 
+    console.log(request.body)
+
     // request params for firestore document object
     const staffMember = request.body
     let newUser
