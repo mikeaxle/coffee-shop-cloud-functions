@@ -1,8 +1,6 @@
 import * as functions from 'firebase-functions'
 import * as admin from 'firebase-admin'
 import * as sendgrid from '@sendgrid/mail'
-import { document } from 'firebase-functions/lib/providers/firestore';
-import { event } from 'firebase-functions/lib/providers/analytics';
 
 // firebase admin init admin
 admin.initializeApp()
@@ -11,7 +9,7 @@ admin.initializeApp()
 const APP_NAME = 'Coffee Shop App';
 
 // set send grid api key
-const API_KEY = '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'
+const API_KEY = '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'
 
 // Creates new non-admin user
 export const createUser = functions.https.onRequest(async (request, response) => {
